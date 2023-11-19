@@ -1,0 +1,7 @@
+folium
+requests
+streamlit
+streamlit_folium
+osmnx
+networkx
+osmapi
