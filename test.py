@@ -6,6 +6,7 @@ import osmnx as ox
 import networkx as nx
 import osmapi
 
+
 # Getting start/dest coordinates
 def get_lat_lon(streetname):
     BASE_URL = 'https://nominatim.openstreetmap.org/search?format=json'
