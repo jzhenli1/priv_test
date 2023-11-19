@@ -5,7 +5,6 @@ from streamlit_folium import folium_static
 import osmnx as ox
 import networkx as nx
 import osmapi
-import scikit-learn
 
 # Getting start/dest coordinates
 def get_lat_lon(streetname):
