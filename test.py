@@ -5,7 +5,6 @@ from streamlit_folium import folium_static
 import osmnx as ox
 import networkx as nx
 import osmapi
-import sklearn
 
 
 # Getting start/dest coordinates
