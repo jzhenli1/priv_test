@@ -10,7 +10,7 @@ import osmapi
 # Getting start/dest coordinates
 def get_lat_lon(streetname):
     BASE_URL = 'https://nominatim.openstreetmap.org/search?format=json'
-    response = requests.get(f'{BASE_URL}&street={streetname}&city=Frankfurt')
+    response = requests.get(f'{BASE_URL}&street={streetname}&city=Stuttgart')
     data = response.json()
     
     if data:
@@ -28,7 +28,7 @@ def get_osm_route(start_location, dest_location):
     start_coords = get_lat_lon(start_location)
     dest_coords = get_lat_lon(dest_location)
     
-    G = ox.graph_from_place('Frankfurt', network_type='bike')
+    G = ox.graph_from_place('Stuttgart', network_type='bike')
     G = ox.add_edge_speeds(G)
     G = ox.add_edge_travel_times(G)
     
@@ -93,4 +93,4 @@ if st.button('Find Route'):
     folium_static(m, width=700)
 else:
     # Display an empty map
-    folium_static(folium.Map(location=[50.110924, 8.682127], zoom_start=12), width=700)
+    folium_static(folium.Map(location=[48.7758, 9.1829], zoom_start=12), width=700)
