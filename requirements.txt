@@ -6,4 +6,3 @@ osmnx
 networkx
 osmapi
 scikit-learn
-sklearn
