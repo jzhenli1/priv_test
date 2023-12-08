@@ -20,6 +20,13 @@ def get_lat_lon(streetname):
         # Handle the case where the geocoding service does not return valid data
         return None
  
+# Initializing OSM Graph
+@st.cache_resource
+def init_osm_graph(city):
+    G = ox.graph_from_place(city, network_type='bike')
+    return G
+
+G = init_osm_graph('Stuttgart')
     
 # Get fastest route from OSM
 def get_osm_route(start_location, dest_location):
@@ -48,6 +55,7 @@ def get_osm_route(start_location, dest_location):
     shortest_route = nx.shortest_path(G, orig_node, dest_node, weight="length")
     
     return shortest_route
+
 
     
 # App layout
@@ -81,10 +89,7 @@ if st.button('Find Route'):
     if route_type_lower == 'bike-friendly route':
         # Just a straight polyline
         folium.PolyLine([start_data, dest_data]).add_to(m)
-    else:
-        # Initializing OSM Graph
-        G = ox.graph_from_place('Stuttgart', network_type='bike')
-        
+    else:      
         # Get the route based on the selected type
         shortest_route = get_osm_route(start_location, dest_location)
         
