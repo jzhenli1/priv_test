@@ -71,19 +71,19 @@ if st.button('Find Route'):
     start_data = get_lat_lon(start_location)
     dest_data = get_lat_lon(dest_location)
 
-    # Create folium map
-    m = folium.Map(location=start_data, zoom_start=12)
-
-    # Add markers and polyline
-    folium.Marker(start_data, popup='Start',
-                  icon = folium.Icon(color='green', prefix='fa',icon='bicycle')).add_to(m)
-    folium.Marker(dest_data, popup='Destination', 
-                  icon = folium.Icon(color='red', icon="flag")).add_to(m)
-    
+      
     # Convert route type to lowercase for consistency
     route_type_lower = route_type.lower()
-
+    
     if route_type_lower == 'bike-friendly route':
+        # Create folium map
+        m = folium.Map(location=start_data, zoom_start=12)
+
+        # Add markers and polyline
+        folium.Marker(start_data, popup='Start',
+                    icon = folium.Icon(color='green', prefix='fa',icon='bicycle')).add_to(m)
+        folium.Marker(dest_data, popup='Destination', 
+                    icon = folium.Icon(color='red', icon="flag")).add_to(m)
         # Just a straight polyline
         folium.PolyLine([start_data, dest_data]).add_to(m)
     else:
@@ -103,6 +103,10 @@ if st.button('Find Route'):
         # folium.PolyLine(coordinates).add_to(m)
         
         m = ox.plot_route_folium(G, shortest_route, tiles='openstreetmap')
+        folium.Marker(start_data, popup='Start',
+                    icon = folium.Icon(color='green', prefix='fa',icon='bicycle')).add_to(m)
+        folium.Marker(dest_data, popup='Destination', 
+                    icon = folium.Icon(color='red', icon="flag")).add_to(m)
 
     # Display the map
     folium_static(m, width=700)
