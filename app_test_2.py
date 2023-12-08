@@ -6,9 +6,6 @@ import osmnx as ox
 import networkx as nx
 import osmapi
 
-# Initializing OSM Graph
-G = ox.graph_from_place('Stuttgart', network_type='bike')
-
 # Getting start/dest coordinates
 def get_lat_lon(streetname):
     BASE_URL = 'https://nominatim.openstreetmap.org/search?format=json'
@@ -71,22 +68,23 @@ if st.button('Find Route'):
     start_data = get_lat_lon(start_location)
     dest_data = get_lat_lon(dest_location)
 
-      
+    # Create folium map
+    m = folium.Map(location=start_data, zoom_start=11)
+
+    # Add markers and polyline
+    folium.Marker(start_data, popup='Start').add_to(m)
+    folium.Marker(dest_data, popup='Destination').add_to(m)
+    
     # Convert route type to lowercase for consistency
     route_type_lower = route_type.lower()
-    
-    if route_type_lower == 'bike-friendly route':
-        # Create folium map
-        m = folium.Map(location=start_data, zoom_start=12)
 
-        # Add markers and polyline
-        folium.Marker(start_data, popup='Start',
-                    icon = folium.Icon(color='green', prefix='fa',icon='bicycle')).add_to(m)
-        folium.Marker(dest_data, popup='Destination', 
-                    icon = folium.Icon(color='red', icon="flag")).add_to(m)
+    if route_type_lower == 'bike-friendly route':
         # Just a straight polyline
         folium.PolyLine([start_data, dest_data]).add_to(m)
     else:
+        # Initializing OSM Graph
+        G = ox.graph_from_place('Stuttgart', network_type='bike')
+        
         # Get the route based on the selected type
         shortest_route = get_osm_route(start_location, dest_location)
         
