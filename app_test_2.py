@@ -36,8 +36,9 @@ def get_osm_route(start_location, dest_location):
     orig_node = ox.distance.nearest_nodes(G, start_data[1], start_data[0])
     dest_node = ox.distance.nearest_nodes(G, dest_data[1], dest_data[0])
     shortest_route = nx.shortest_path(G, orig_node, dest_node, weight="length")
+    pathDistance = nx.shortest_path_length(G, orig_node, dest_node, weight='length')
     
-    return shortest_route
+    return shortest_route, pathDistance
 
    
 # App layout
@@ -73,7 +74,7 @@ if st.button('Find Route'):
         folium.PolyLine([start_data, dest_data]).add_to(m)
     else:      
         # Get the route based on the selected type
-        shortest_route = get_osm_route(start_location, dest_location)
+        shortest_route, pathDistance = get_osm_route(start_location, dest_location)
          
         m = ox.plot_route_folium(G, shortest_route, tiles='openstreetmap')
         folium.Marker(start_data, popup='Start',
