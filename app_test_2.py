@@ -63,8 +63,9 @@ if st.button('Find Route'):
     m = folium.Map(location=start_data, zoom_start=11)
 
     # Add markers and polyline
-    folium.Marker(start_data, popup='Start').add_to(m)
-    folium.Marker(dest_data, popup='Destination').add_to(m)
+    folium.Marker(start_data, popup='Start',
+                  icon = folium.Icon(color='green', prefix='fa',icon='bicycle')).add_to(m)
+    folium.Marker(dest_data, popup='Destination', icon = folium.Icon(color='red', icon="flag")).add_to(m)
     
     # Convert route type to lowercase for consistency
     route_type_lower = route_type.lower()
@@ -78,7 +79,7 @@ if st.button('Find Route'):
          
         m = ox.plot_route_folium(G, shortest_route, tiles='openstreetmap')
         folium.Marker(start_data, popup='Start',
-                    icon = folium.Icon(color='green', prefix='fa',icon='bicycle')).add_to(m)
+                      icon = folium.Icon(color='green', prefix='fa',icon='bicycle')).add_to(m)
         popup_text = f'Destination<br><br>Distance: {round(pathDistance/1000, 1)} km'
         folium.Marker(dest_data, popup=popup_text, icon = folium.Icon(color='red', icon="flag")).add_to(m)
 
