@@ -40,12 +40,6 @@ edges_unlist = edges.explode('osmid').reset_index()
 
 # Function to extract OSM features
 def osm_features(city):
-    # # Get type of roads
-    # road_types = edges.reset_index()[['osmid','highway']]
-
-    # # Get road width
-    # width = edges.reset_index()[['osmid', 'width']]
-
     # Create a GeoDataFrame for intersections
     # intersections = gpd.GeoDataFrame(geometry=nodes.geometry)
 
@@ -61,13 +55,16 @@ def osm_features(city):
     # Get bus stops
     transit_bus = ox.features_from_place(city, tags={"highway": 'bus_stop'}).reset_index()[['osmid','highway']].rename(columns={'highway': 'busStop'})
 
+    # Get lighting
+    lighting = ox.features_from_place(city, tags={'highway': 'street_lamp'}).reset_index()[['osmid','highway']].rename(columns={'highway': 'lighting'})
+    
     # On street parking
     street_parking_right = ox.features_from_place(city, tags={"parking:right": True})['parking:right'].reset_index()[['osmid','parking:right']]
     street_parking_left = ox.features_from_place(city, tags={"parking:left": True})['parking:left'].reset_index()[['osmid','parking:left']]
     street_parking_both = ox.features_from_place(city, tags={"parking:both": True})['parking:both'].reset_index()[['osmid','parking:both']]
     
     # Merge all features
-    geodfs_to_merge = [bicycle_parking, transit_tram, transit_bus,
+    geodfs_to_merge = [bicycle_parking, transit_tram, transit_bus, lighting,
                        street_parking_right, street_parking_left, street_parking_both]
 
     # Initial merge with nodes_and_edges
@@ -91,6 +88,8 @@ def calculate_raw_score(row):
         raw_score += 1
     if pd.isna(row['busStop']):
         raw_score += 1
+    if row['lighting'] == 'street_lamp':
+        raw_score += 1
     if pd.isna(row['parking:right']) or row['parking:right'] == 'no':
         raw_score += 1
     if pd.isna(row['parking:left']) or row['parking:left'] == 'no':
@@ -103,40 +102,28 @@ def calculate_raw_score(row):
 
 # Function to map road type to score
 def road_type_to_score(road_type):
-    if re.search(r'\[.*residential.*\]', road_type):
-        return 0.7
-    elif re.search(r'\[.*service.*\]', road_type) or re.search(r'\[.*track.*\]', road_type):
-        return 0.1
-    elif re.search(r'\[.*living_street.*\]', road_type):
-        return 0.7
-    elif re.search(r'\[.*pedestrian.*\]', road_type):
-        return 0.8
-    elif re.search(r'\[.*cycleway.*\]', road_type):
+    if re.search(r'cycleway', road_type):
         return 1
-    elif re.search(r'\[.*primary.*\]', road_type) or re.search(r'\[.*primary_link.*\]', road_type):
-        return 0.2
-    elif re.search(r'\[.*tertiary.*\]', road_type) or re.search(r'\[.*tertiary_link.*\]', road_type):
-        return 0.5
-    elif re.search(r'\[.*secondary.*\]', road_type) or re.search(r'\[.*secondary_link.*\]', road_type):
-        return 0.4
-    elif road_type in ['service', 'track']:
+    elif re.search(r'trunk', road_type):
+        return 0
+    elif re.search(r'service', road_type) or re.search(r'track', road_type):
         return 0.1
-    elif road_type in ['primary', 'primary_link']:
+    elif re.search(r'primary', road_type):
         return 0.2
-    elif road_type in ['secondary', 'secondary_link']:
+    elif re.search(r'secondary', road_type):
         return 0.4
-    elif road_type in ['tertiary', 'tertiary_link']:
+    elif re.search(r'tertiary', road_type):
         return 0.5
+    elif re.search(r'residential', road_type) or re.search(r'living_street', road_type):
+        return 0.7
+    elif re.search(r'pedestrian', road_type):
+        return 0.8
+    elif road_type == 'path':
+        return 0.7
     elif road_type == 'unclassified':
         return 0.6
-    elif road_type in ['residential', 'living_street']:
-        return 0.7
-    elif road_type in ['pedestrian', 'path']:
-        return 0.8
-    elif road_type == 'cycleway':
-        return 1
     else:
-        return 0
+        return np.nan
     
 # Function to calculate the mean width
 def calculate_mean_width(width):
@@ -169,9 +156,34 @@ merged_osm = edges_unlist.merge(merged_features, on='osmid', how='outer')
 
 # Calculate scores
 merged_osm['rawScore'] = merged_osm.apply(calculate_raw_score, axis=1)
-merged_osm['scaledScore'] = merged_osm['rawScore'] / 7
+merged_osm['scaledScore'] = merged_osm['rawScore'] / 8
 merged_osm['typeScore'] = merged_osm['highway'].astype(str).apply(road_type_to_score)
 merged_osm['meanWidth'] = merged_osm['width'].apply(calculate_mean_width)
 merged_osm['widthScore'] = merged_osm['meanWidth'].apply(width_score)
 
-merged_osm['finalScore'] = (merged_osm['scaledScore'] + merged_osm['typeScore'] + merged_osm['widthScore']) / 3
+
+# Calculate final score (taking into account NaN values in typeScore and widthScore)
+def calculate_final_score(row):
+    scaled_score = row['scaledScore']
+    type_score = row['typeScore']
+    width_score = row['widthScore']
+
+    if pd.isna(type_score) and pd.isna(width_score):
+        return scaled_score
+    elif pd.isna(width_score):
+        return (scaled_score + type_score) / 2
+    elif pd.isna(type_score):
+        return (scaled_score + width_score) / 2
+    else:
+        return (scaled_score + type_score + width_score) / 3
+    
+merged_osm['finalScore'] = merged_osm.apply(calculate_final_score, axis=1)
+
+
+
+
+
+
+
+
+
