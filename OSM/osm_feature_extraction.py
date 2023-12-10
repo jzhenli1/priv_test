@@ -44,24 +44,24 @@ def osm_features(city):
     # intersections = gpd.GeoDataFrame(geometry=nodes.geometry)
 
     # Get nodes with the highway=traffic_signals tag (intersections with traffic lights)
-    traffic_nodes = ox.features_from_place(city, tags={"highway": "traffic_signals"}).reset_index()[['osmid','highway']].rename(columns={'highway': 'trafficSignals'})
+    traffic_nodes = ox.features_from_place(city, tags={"highway": "traffic_signals"}).reset_index()[['osmid','highway', 'geometry']].rename(columns={'highway': 'trafficSignals'})
 
     # Get spots with bicycle parking
-    bicycle_parking = ox.features_from_place(city, tags={"amenity": "bicycle_parking"}).reset_index()[['osmid','amenity']].rename(columns={'amenity': 'bicycleParking'})
+    bicycle_parking = ox.features_from_place(city, tags={"amenity": "bicycle_parking"}).reset_index()[['osmid','amenity', 'geometry']].rename(columns={'amenity': 'bicycleParking'})
 
     # Public transit options
     # Get tram stops
-    transit_tram = ox.features_from_place(city, tags={"railway": 'tram_stop'}).reset_index()[['osmid','railway']].rename(columns={'railway': 'tramStop'})
+    transit_tram = ox.features_from_place(city, tags={"railway": 'tram_stop'}).reset_index()[['osmid','railway', 'geometry']].rename(columns={'railway': 'tramStop'})
     # Get bus stops
-    transit_bus = ox.features_from_place(city, tags={"highway": 'bus_stop'}).reset_index()[['osmid','highway']].rename(columns={'highway': 'busStop'})
+    transit_bus = ox.features_from_place(city, tags={"highway": 'bus_stop'}).reset_index()[['osmid','highway', 'geometry']].rename(columns={'highway': 'busStop'})
 
     # Get lighting
-    lighting = ox.features_from_place(city, tags={'highway': 'street_lamp'}).reset_index()[['osmid','highway']].rename(columns={'highway': 'lighting'})
+    lighting = ox.features_from_place(city, tags={'highway': 'street_lamp'}).reset_index()[['osmid','highway', 'geometry']].rename(columns={'highway': 'lighting'})
     
     # On street parking
-    street_parking_right = ox.features_from_place(city, tags={"parking:right": True})['parking:right'].reset_index()[['osmid','parking:right']]
-    street_parking_left = ox.features_from_place(city, tags={"parking:left": True})['parking:left'].reset_index()[['osmid','parking:left']]
-    street_parking_both = ox.features_from_place(city, tags={"parking:both": True})['parking:both'].reset_index()[['osmid','parking:both']]
+    street_parking_right = ox.features_from_place(city, tags={"parking:right": True}).reset_index()[['osmid','geometry','parking:right']]
+    street_parking_left = ox.features_from_place(city, tags={"parking:left": True}).reset_index()[['osmid','geometry','parking:left']]
+    street_parking_both = ox.features_from_place(city, tags={"parking:both": True}).reset_index()[['osmid','geometry','parking:both']]
     
     # Merge all features
     geodfs_to_merge = [bicycle_parking, transit_tram, transit_bus, lighting,
@@ -72,7 +72,7 @@ def osm_features(city):
 
     # Perform outer merges in a loop
     for geodf in geodfs_to_merge:
-        merged_osm = merged_osm.merge(geodf, on='osmid', how='outer')
+        merged_osm = merged_osm.merge(geodf, on=('osmid', 'geometry'), how='outer')
         
     return merged_osm
 
@@ -152,7 +152,7 @@ def width_score(width):
 merged_features = osm_features('Stuttgart')
 
 # Merge with edges_unlist
-merged_osm = edges_unlist.merge(merged_features, on='osmid', how='outer')
+merged_osm = edges_unlist.merge(merged_features, on=('osmid', 'geometry'), how='outer')
 
 # Calculate scores
 merged_osm['rawScore'] = merged_osm.apply(calculate_raw_score, axis=1)
@@ -178,10 +178,11 @@ def calculate_final_score(row):
         return (scaled_score + type_score + width_score) / 3
     
 merged_osm['finalScore'] = merged_osm.apply(calculate_final_score, axis=1)
+merged_osm['geometry'] = merged_osm['geometry'].astype(str).apply(wkt.loads)
 
 
-
-
+# Save for further use
+merged_osm.to_csv('merged_osm.csv', index=False)
 
 
 
