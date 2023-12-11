@@ -37,7 +37,7 @@ def import_data(path):
     merged_osm = pd.read_csv(path)
     return merged_osm
 
-merged_osm = import_data('OSM\merged_osm.csv')
+merged_osm = import_data('OSM/merged_osm.csv')
 
 # Initializing OSM_bike Graph
 @st.cache_resource
