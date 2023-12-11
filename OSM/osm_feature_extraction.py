@@ -180,6 +180,10 @@ def calculate_final_score(row):
 merged_osm['finalScore'] = merged_osm.apply(calculate_final_score, axis=1)
 merged_osm['geometry'] = merged_osm['geometry'].astype(str).apply(wkt.loads)
 
+# Create reversed scores since osmnx MINIMIZES (instead of maximizing) on the weight parameter
+# "Better" roads need to have lower scores
+merged_osm['finalScore_reversed'] = 1 - merged_osm['finalScore']
+
 
 # Save for further use
 merged_osm.to_csv('merged_osm.csv', index=False)
