@@ -6,3 +6,6 @@ osmnx
 networkx
 osmapi
 scikit-learn
+pandas
+geopandas
+shapely
