@@ -4,6 +4,9 @@ import streamlit as st
 from streamlit_folium import folium_static
 import osmnx as ox
 import networkx as nx
+import pandas as pd
+import geopandas as gpd
+from shapely import wkt
 
 # Getting start/dest coordinates
 def get_lat_lon(streetname):
@@ -23,9 +26,31 @@ def get_lat_lon(streetname):
 @st.cache_resource
 def init_osm_graph(city):
     G = ox.graph_from_place(city, network_type='bike')
-    return G
+    nodes = ox.graph_to_gdfs(G, nodes=True, edges=False)
+    return G, nodes
 
-G = init_osm_graph('Stuttgart')
+G, nodes = init_osm_graph('Stuttgart')
+
+# Importing csv with calculated scores
+@st.cache_data
+def import_data(path):
+    merged_osm = pd.read_csv(path)
+    return merged_osm
+
+merged_osm = import_data('OSM\merged_osm.csv')
+
+# Initializing OSM_bike Graph
+@st.cache_resource
+def db_to_graph(_db_edges):
+    # nodes = gpd.GeoDataFrame(db_nodes).set_index(["osmid"])
+    # nodes = _db_nodes
+    edges = gpd.GeoDataFrame(_db_edges).set_index(["u", "v", "key"])
+    edges["geometry"] = edges["geometry"].astype(str).apply(lambda x: wkt.loads(x))
+    edges = gpd.GeoDataFrame(edges).set_crs("epsg:4326")
+    G = ox.graph_from_gdfs(nodes, edges)
+    return edges, G
+
+bike_edges, G_bike = db_to_graph(merged_osm)
     
 # Get fastest route from OSM
 def get_osm_route(start_location, dest_location):
@@ -39,6 +64,19 @@ def get_osm_route(start_location, dest_location):
     pathDistance = nx.shortest_path_length(G, orig_node, dest_node, weight='length')
     
     return shortest_route, pathDistance
+
+# Get best bike route from OSM
+def get_bike_route(graph, start_location, dest_location, weight):
+     
+    start_data = get_lat_lon(start_location)
+    dest_data = get_lat_lon(dest_location)
+
+    orig_edge = ox.nearest_edges(graph, start_data[1], start_data[0])
+    dest_edge = ox.nearest_edges(graph, dest_data[1], dest_data[0])
+    best_route = ox.shortest_path(graph, orig_edge[0], dest_edge[1], weight=weight)
+    # best_pathDistance = nx.shortest_path_length(graph, orig_edge, dest_edge, weight=weight)
+    
+    return best_route #, best_pathDistance
 
    
 # App layout
@@ -71,10 +109,15 @@ if st.button('Find Route'):
     route_type_lower = route_type.lower()
 
     if route_type_lower == 'bike-friendly route':
-        # Just a straight polyline
-        folium.PolyLine([start_data, dest_data]).add_to(m)
+        # Get the best bike route
+        bikeable_route = get_bike_route(G_bike, start_location, dest_location, "finalSore_reversed")
+        
+        m = ox.plot_route_folium(G_bike, bikeable_route, tiles='openstreetmap')
+        folium.Marker(start_data, popup='Start',
+                      icon = folium.Icon(color='green', prefix='fa',icon='bicycle')).add_to(m)
+        folium.Marker(dest_data, popup='Destination', icon = folium.Icon(color='red', icon="flag")).add_to(m)
     else:      
-        # Get the route based on the selected type
+        # Get the shortest route
         shortest_route, pathDistance = get_osm_route(start_location, dest_location)
          
         m = ox.plot_route_folium(G, shortest_route, tiles='openstreetmap')
