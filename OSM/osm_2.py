@@ -9,35 +9,7 @@ from scipy.spatial import cKDTree
 import re
 from shapely import wkt
 
-# Function to extract geo data from OSM
-def geodata_to_df(country, city):
-
-    G = ox.graph_from_place(city, network_type='bike')  # download raw geospatial data from OSM
-
-    nodes, edges = ox.graph_to_gdfs(G, nodes=True, edges=True)
-    nodes["city"], edges["city"] = city, city
-    nodes["country"], edges["country"] = country, country
-
-    edges["lat_long"] = edges["geometry"].apply(lambda x: re.sub(r'[^0-9., ]', "", str([re.sub(r'[^0-9. ]', '', str(i)) for i in list(zip(x.xy[1], x.xy[0]))])))
-    #edges["geometry"] = edges["geometry"].apply(lambda x: wkt.dumps(x))
-
-    edges["highway"] = edges["highway"].apply(lambda x: ", ".join(x) if x.__class__.__name__=="list" else x)
-    edges["name"] = edges["name"].apply(lambda x: ", ".join(x) if x.__class__.__name__=="list" else x)
-    edges["maxspeed"] = edges["maxspeed"].apply(lambda x: ", ".join(x) if x.__class__.__name__ == "list" else x)
-    edges["ref"] = edges["ref"].apply(lambda x: ", ".join(x) if x.__class__.__name__ == "list" else x)
-    edges["reversed"] = edges["reversed"].apply(lambda x: x[0] if x.__class__.__name__ == "list" else x)
-    edges["oneway"] = edges["oneway"].apply(lambda x: x[0] if x.__class__.__name__ == "list" else x)
-
-    edges.fillna(-99, inplace=True)
-    nodes.fillna(-99, inplace=True)
-    edges["name"] = edges["name"].astype(str).replace("-99", None)
-
-    # nodes_and_edges = gpd.sjoin(edges, nodes, how="left", predicate="intersects")
-
-    return G, nodes, edges
-
-#G, nodes, edges = geodata_to_df('Germany', 'Stuttgart')
-
+# Extract the graph from OSM
 G = ox.graph_from_place('Stuttgart', network_type='bike')
 nodes, edges = ox.graph_to_gdfs(G, nodes=True, edges=True)
 
@@ -232,9 +204,30 @@ edges_reset['finalScore_reversed'] = 1 - edges_reset['finalScore']
 # Reset the index
 edges_reset = edges_reset.set_index(['u', 'v', 'key'])
 
-# Saving the final gdf as a GeoJSON file
-edges_reset.to_file('osm_with_scores.geojson', driver='GeoJSON')
+# Remove highways from df
+def contains_excluded_road_type(road_type):
+    # List of road types to be excluded
+    excluded_types = ['trunk', 'trunk_link', 'motorway', 'motorway_link', 'primary', 'primary_link']
+    # If the road_type is a string, check if it contains any excluded type
+    if isinstance(road_type, str):
+        return any(excluded in road_type for excluded in excluded_types)
+    
+    # If the road_type is a list, check if any element of the list is an excluded type
+    elif isinstance(road_type, list):
+        return any(any(excluded in item for excluded in excluded_types) for item in road_type)
+    
+    # Return False for other data types
+    return False
+
+# Apply the function to each element in the 'highway' column and filter out the matches
+edges_rest = edges_reset[~edges_reset['highway'].apply(contains_excluded_road_type)]
 
 # Saving as a csv
 edges_reset['geometry'] = edges_reset['geometry'].astype(str).apply(wkt.loads)
 edges_reset.to_csv('osm_with_scores.csv', index=True)
+edges_rest.to_csv('osm_scores_no_highways.csv', index=True)
+
+# Display all rows
+pd.set_option('display.max_rows', None)
+# Reset
+pd.reset_option('display.max_rows')
