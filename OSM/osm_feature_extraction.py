@@ -104,19 +104,17 @@ def calculate_raw_score(row):
 def road_type_to_score(road_type):
     if re.search(r'cycleway', road_type):
         return 1
-    elif re.search(r'trunk', road_type):
+    elif re.search(r'trunk', road_type) or re.search(r'motorway', road_type) or re.search(r'primary', road_type):
         return 0
-    elif re.search(r'service', road_type) or re.search(r'track', road_type):
+    elif re.search(r'service', road_type):
         return 0.1
-    elif re.search(r'primary', road_type):
-        return 0.2
     elif re.search(r'secondary', road_type):
-        return 0.4
+        return 0.2
     elif re.search(r'tertiary', road_type):
-        return 0.5
+        return 0.3
     elif re.search(r'residential', road_type) or re.search(r'living_street', road_type):
         return 0.7
-    elif re.search(r'pedestrian', road_type):
+    elif re.search(r'pedestrian', road_type) or re.search(r'track', road_type):
         return 0.8
     elif road_type == 'path':
         return 0.7
@@ -138,13 +136,12 @@ def calculate_mean_width(width):
     
 # Function to map width to score
 def width_score(width):
-    if width <= 10:
+    if width <= 10 and width > 0:
         return width / 10
     elif width > 10:
         return 1
     else:
         return None
-
 
 
 ### Appying above functions
