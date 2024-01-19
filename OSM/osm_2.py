@@ -229,9 +229,12 @@ edges_reset['finalScore'] = edges_reset.apply(calculate_final_score, axis=1)
 # "Better" roads need to have lower scores
 edges_reset['finalScore_reversed'] = 1 - edges_reset['finalScore']
 
-
-# edges_reset['geometry'] = edges_reset['geometry'].astype(str).apply(wkt.loads)
+# Reset the index
 edges_reset = edges_reset.set_index(['u', 'v', 'key'])
 
-# Saving the final gdf
+# Saving the final gdf as a GeoJSON file
 edges_reset.to_file('osm_with_scores.geojson', driver='GeoJSON')
+
+# Saving as a csv
+edges_reset['geometry'] = edges_reset['geometry'].astype(str).apply(wkt.loads)
+edges_reset.to_csv('osm_with_scores.csv', index=True)
