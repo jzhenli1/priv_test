@@ -3,7 +3,7 @@ import geopandas as gpd
 import pandas as pd
 import numpy as np
 
-from shapely.geometry import Point, LineString
+from shapely.geometry import Point, LineString, Polygon
 from scipy.spatial import cKDTree
 
 import re
@@ -41,17 +41,52 @@ def geodata_to_df(country, city):
 G = ox.graph_from_place('Stuttgart', network_type='bike')
 nodes, edges = ox.graph_to_gdfs(G, nodes=True, edges=True)
 
-
-
-# Nearest Neighbor Analysis
-# Convert linestring geometries to a KDTree
-coords = np.array([(line.xy[0][0], line.xy[1][0]) for line in edges.geometry])
-tree = cKDTree(coords)
-
-# Reset the index of edges if it's a multi-level index
+# Reset the index of edges --> this is the gdf we are going to work with
 edges_reset = edges.reset_index()
 edges_reset['index'] = range(len(edges_reset))
 
+# Function to extract features
+def osm_features(city):
+    # Get nodes with the highway=traffic_signals tag (intersections with traffic lights)
+    traffic_nodes = ox.features_from_place(city, tags={"highway": "traffic_signals"}).reset_index(
+        )[['highway', 'geometry']].rename(columns={'highway': 'trafficSignals'})
+
+    # Get spots with bicycle parking
+    bicycle_parking = ox.features_from_place(city, tags={"amenity": "bicycle_parking"}).reset_index(
+        )[['amenity', 'geometry']].rename(columns={'amenity': 'bicycleParking'})
+
+    # Public transit options
+    # Get tram stops
+    transit_tram = ox.features_from_place(city, tags={"railway": 'tram_stop'}).reset_index(
+        )[['railway', 'geometry']].rename(columns={'railway': 'tramStop'})
+    # Get bus stops
+    transit_bus = ox.features_from_place(city, tags={"highway": 'bus_stop'}).reset_index(
+        )[['highway', 'geometry']].rename(columns={'highway': 'busStop'})
+
+    # Get lighting
+    lighting = ox.features_from_place(city, tags={'highway': 'street_lamp'}).reset_index(
+        )[['highway', 'geometry']].rename(columns={'highway': 'lighting'})
+    
+    # On street parking
+    street_parking_right = ox.features_from_place(city, tags={"parking:right": True}).reset_index(
+        )[['geometry','parking:right']]
+    street_parking_left = ox.features_from_place(city, tags={"parking:left": True}).reset_index(
+        )[['geometry','parking:left']]
+    street_parking_both = ox.features_from_place(city, tags={"parking:both": True}).reset_index(
+        )[['geometry','parking:both']]
+    
+    return traffic_nodes, bicycle_parking, transit_tram, transit_bus, lighting, street_parking_right, street_parking_left, street_parking_both
+
+
+traffic_nodes, bicycle_parking, transit_tram, transit_bus, lighting, street_parking_right, street_parking_left, street_parking_both = osm_features('Stuttgart')
+
+
+# Nearest Neighbor Analysis
+# Convert linestring geometries from edges gdf to a KDTree
+coords = np.array([(line.xy[0][0], line.xy[1][0]) for line in edges.geometry])
+tree = cKDTree(coords)
+
+# Function to find the nearest edge to a point of the extracted features
 def nearest_edges_point(node): 
     # Extracting coordinates from the points
     points_coordinates = node.geometry.apply(lambda point: [point.x, point.y]).to_list()
@@ -62,17 +97,26 @@ def nearest_edges_point(node):
 
     return idx
 
+# Function add the nearest edge index to the extracted features and perform the merge
+def merge_nearest_edges(node, edges_reset=edges_reset):
+    # Apply the conversions based on geometry type
+    node['geometry'] = node['geometry'].apply(lambda geom: geom.interpolate(0.5, normalized=True) if isinstance(geom, LineString) else geom)
+    node['geometry'] = node['geometry'].apply(lambda geom: geom.centroid if isinstance(geom, Polygon) else geom)
 
+    # Add the nearest line index to the points GeoDataFrame
+    node['nearest_idx'] = nearest_edges_point(node)
+    node = node.drop('geometry', axis=1)
+    # Use drop_duplicates to keep only the first occurrence of each unique value in 'nearest_idx'
+    node = node.drop_duplicates(subset='nearest_idx')
 
+    # Now perform the merge
+    edges_reset = edges_reset.merge(node, right_on='nearest_idx', left_on='index', how='left').drop('nearest_idx', axis=1)
 
-# Get nodes with the highway=traffic_signals tag (intersections with traffic lights)
-traffic_nodes = ox.features_from_place('Stuttgart', tags={"highway": "traffic_signals"}).reset_index()[['highway', 'geometry']].rename(columns={'highway': 'trafficSignals'})
+    return edges_reset
 
-# Add the nearest line index to the points GeoDataFrame
-traffic_nodes['nearest_idx'] = nearest_edges_point(traffic_nodes)
-traffic_nodes = traffic_nodes.drop('geometry', axis=1)
-# Use drop_duplicates to keep only the first occurrence of each unique value in 'nearest_idx'
-traffic_nodes = traffic_nodes.drop_duplicates(subset='nearest_idx')
+# Loop through the features and perform the merge
+features = [traffic_nodes, bicycle_parking, transit_tram, transit_bus, lighting, 
+            street_parking_right, street_parking_left, street_parking_both]
 
-# Now perform the merge
-edges_reset = edges_reset.merge(traffic_nodes, right_on='nearest_idx', left_on='index', how='left').drop('nearest_idx', axis=1)
+for feature in features:
+    edges_reset = merge_nearest_edges(feature, edges_reset=edges_reset)
