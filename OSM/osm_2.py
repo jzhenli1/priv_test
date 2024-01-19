@@ -81,7 +81,11 @@ def osm_features(city):
 traffic_nodes, bicycle_parking, transit_tram, transit_bus, lighting, street_parking_right, street_parking_left, street_parking_both = osm_features('Stuttgart')
 
 
-# Nearest Neighbor Analysis
+
+##########################################
+## NEAREST NEIGHBOR ANALYSIS
+##########################################
+
 # Convert linestring geometries from edges gdf to a KDTree
 coords = np.array([(line.xy[0][0], line.xy[1][0]) for line in edges.geometry])
 tree = cKDTree(coords)
@@ -120,3 +124,108 @@ features = [traffic_nodes, bicycle_parking, transit_tram, transit_bus, lighting,
 
 for feature in features:
     edges_reset = merge_nearest_edges(feature, edges_reset=edges_reset)
+
+
+
+##########################################
+## SCORE CALCULATION
+##########################################
+
+# Function to calculate the raw scores from extracted features
+def calculate_feature_score(row):
+    raw_score = 0
+    if row['trafficSignals'] == 'traffic_signals':
+        raw_score += 1
+    if row['bicycleParking'] == 'bicycle_parking':
+        raw_score += 1
+    if pd.isna(row['tramStop']):
+        raw_score += 1
+    if pd.isna(row['busStop']):
+        raw_score += 1
+    if row['lighting'] == 'street_lamp':
+        raw_score += 1
+    if pd.isna(row['parking:right']) or row['parking:right'] == 'no':
+        raw_score += 1
+    if pd.isna(row['parking:left']) or row['parking:left'] == 'no':
+        raw_score += 1
+    if pd.isna(row['parking:both']) or row['parking:both'] == 'no':
+        raw_score += 1
+
+    return raw_score
+
+
+# Function to map road type to score
+def road_type_to_score(road_type):
+    if re.search(r'cycleway', road_type):
+        return 1
+    elif re.search(r'trunk', road_type) or re.search(r'motorway', road_type) or re.search(r'primary', road_type):
+        return 0
+    elif re.search(r'residential', road_type) or re.search(r'living_street', road_type):
+        return 0.7
+    elif re.search(r'pedestrian', road_type) or re.search(r'track', road_type):
+        return 0.8
+    elif road_type == 'path':
+        return 0.7
+    elif re.search(r'service', road_type):
+        return 0.5
+    elif re.search(r'secondary', road_type):
+        return 0.1
+    elif re.search(r'tertiary', road_type):
+        return 0.2
+    elif road_type == 'unclassified':
+        return 0.6
+    elif road_type == 'bridleway' or road_type == 'busway':
+        return 0.5
+    else:
+        return np.nan
+    
+
+# Function to calculate the mean width
+def calculate_mean_width(width):
+    if isinstance(width, list):
+        # Extract numeric values from the list and calculate the mean
+        values = [float(re.search(r'-?\d+\.\d+', str(val)).group()) for val in width if re.search(r'-?\d+\.\d+', str(val))]
+        if values:
+            return np.mean(values)
+    else:
+        # Handle single numeric value or other cases
+        return float(re.search(r'-?\d+\.\d+', str(width)).group()) if re.search(r'-?\d+\.\d+', str(width)) else np.nan
+    
+# Function to map width to score
+def width_score(width):
+    if width <= 10 and width > 0:
+        return width / 10
+    elif width > 10:
+        return 1
+    else:
+        return None
+    
+    
+# Calculate scores
+edges_reset['featureScore'] = edges_reset.apply(calculate_feature_score, axis=1)
+edges_reset['scaledFeatureScore'] = edges_reset['featureScore'] / 8
+edges_reset['roadTypeScore'] = edges_reset['highway'].astype(str).apply(road_type_to_score)
+edges_reset['meanWidth'] = edges_reset['width'].apply(calculate_mean_width)
+edges_reset['widthScore'] = edges_reset['meanWidth'].apply(width_score)
+
+# Calculate final score (taking into account NaN values in typeScore and widthScore)
+def calculate_final_score(row):
+    scaled_score = row['scaledFeatureScore']
+    type_score = row['roadTypeScore']
+    width_score = row['widthScore']
+
+    if pd.isna(type_score) and pd.isna(width_score):
+        return scaled_score
+    elif pd.isna(width_score):
+        return (scaled_score + type_score) / 2
+    elif pd.isna(type_score):
+        return (scaled_score + width_score) / 2
+    else:
+        return (scaled_score + type_score + width_score) / 3
+    
+edges_reset['finalScore'] = edges_reset.apply(calculate_final_score, axis=1)
+# edges_reset['geometry'] = edges_reset['geometry'].astype(str).apply(wkt.loads)
+
+# Create reversed scores since osmnx MINIMIZES (instead of maximizing) on the weight parameter
+# "Better" roads need to have lower scores
+edges_reset['finalScore_reversed'] = 1 - edges_reset['finalScore']
