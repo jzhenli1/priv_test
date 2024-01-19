@@ -224,8 +224,14 @@ def calculate_final_score(row):
         return (scaled_score + type_score + width_score) / 3
     
 edges_reset['finalScore'] = edges_reset.apply(calculate_final_score, axis=1)
-# edges_reset['geometry'] = edges_reset['geometry'].astype(str).apply(wkt.loads)
 
 # Create reversed scores since osmnx MINIMIZES (instead of maximizing) on the weight parameter
 # "Better" roads need to have lower scores
 edges_reset['finalScore_reversed'] = 1 - edges_reset['finalScore']
+
+
+# edges_reset['geometry'] = edges_reset['geometry'].astype(str).apply(wkt.loads)
+edges_reset = edges_reset.set_index(['u', 'v', 'key'])
+
+# Saving the final gdf
+edges_reset.to_file('osm_with_scores.geojson', driver='GeoJSON')
