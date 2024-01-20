@@ -3,7 +3,7 @@ import geopandas as gpd
 import pandas as pd
 import numpy as np
 
-from shapely.geometry import Point, LineString, Polygon
+from shapely.geometry import Point, LineString, Polygon, MultiPolygon
 from scipy.spatial import cKDTree
 
 import re
@@ -47,10 +47,16 @@ def osm_features(city):
     street_parking_both = ox.features_from_place(city, tags={"parking:both": True}).reset_index(
         )[['geometry','parking:both']]
     
-    return traffic_nodes, bicycle_parking, transit_tram, transit_bus, lighting, street_parking_right, street_parking_left, street_parking_both
+    # Pavement Type
+    pavement = ox.features_from_place('Stuttgart', tags={'surface': True}).reset_index(
+        )[['geometry','surface']].rename(columns={'surface': 'pavement'})
+    # Remove MultiPolygons
+    pavement = pavement[pavement['geometry'].apply(lambda x: not isinstance(x, MultiPolygon))]
+    
+    return traffic_nodes, bicycle_parking, transit_tram, transit_bus, lighting, street_parking_right, street_parking_left, street_parking_both, pavement
 
 
-traffic_nodes, bicycle_parking, transit_tram, transit_bus, lighting, street_parking_right, street_parking_left, street_parking_both = osm_features('Stuttgart')
+traffic_nodes, bicycle_parking, transit_tram, transit_bus, lighting, street_parking_right, street_parking_left, street_parking_both, pavement = osm_features('Stuttgart')
 
 
 
@@ -92,7 +98,7 @@ def merge_nearest_edges(node, edges_reset=edges_reset):
 
 # Loop through the features and perform the merge
 features = [traffic_nodes, bicycle_parking, transit_tram, transit_bus, lighting, 
-            street_parking_right, street_parking_left, street_parking_both]
+            street_parking_right, street_parking_left, street_parking_both, pavement]
 
 for feature in features:
     edges_reset = merge_nearest_edges(feature, edges_reset=edges_reset)
@@ -152,6 +158,24 @@ def road_type_to_score(road_type):
         return np.nan
     
 
+# Function to map pavement type to score
+def pavement_type_to_score(surface):
+    if re.search(r'asphalt|paved|concrete|tartan', surface):
+        return 1
+    elif re.search(r'paving_stones|sett|fine_gravel|compacted|gravel|chipseal', surface):
+        return 0.8
+    elif re.search(r'cobblestone|unpaved|pebblestone|sand|mud', surface):
+        return 0.2
+    elif re.search(r'grass|dirt|woodchips|earth', surface):
+        return 0.3
+    elif re.search(r'metal|wood|clay|stone|mulch|rubble|ground', surface):
+        return 0.4
+    elif re.search(r'concrete:plates|grass_paver|metal_grid|acrylic|tiles|stepping_stones|park|.*:lanes', surface):
+        return 0.6
+    else:
+        return np.nan
+    
+
 # Function to calculate the mean width
 def calculate_mean_width(width):
     if isinstance(width, list):
@@ -177,6 +201,7 @@ def width_score(width):
 edges_reset['featureScore'] = edges_reset.apply(calculate_feature_score, axis=1)
 edges_reset['scaledFeatureScore'] = edges_reset['featureScore'] / 8
 edges_reset['roadTypeScore'] = edges_reset['highway'].astype(str).apply(road_type_to_score)
+edges_reset['pavementTypeScore'] = edges_reset['pavement'].astype(str).apply(pavement_type_to_score)
 edges_reset['meanWidth'] = edges_reset['width'].apply(calculate_mean_width)
 edges_reset['widthScore'] = edges_reset['meanWidth'].apply(width_score)
 
@@ -184,17 +209,18 @@ edges_reset['widthScore'] = edges_reset['meanWidth'].apply(width_score)
 def calculate_final_score(row):
     scaled_score = row['scaledFeatureScore']
     type_score = row['roadTypeScore']
+    pavement_score = row['pavementTypeScore']
     width_score = row['widthScore']
 
-    if pd.isna(type_score) and pd.isna(width_score):
-        return scaled_score
-    elif pd.isna(width_score):
-        return (scaled_score + type_score) / 2
-    elif pd.isna(type_score):
-        return (scaled_score + width_score) / 2
+    scores = [scaled_score, type_score, pavement_score, width_score]
+    valid_scores = [score for score in scores if not pd.isna(score)]
+
+    if valid_scores:
+        return sum(valid_scores) / len(valid_scores)
     else:
-        return (scaled_score + type_score + width_score) / 3
-    
+        return np.nan
+
+ 
 edges_reset['finalScore'] = edges_reset.apply(calculate_final_score, axis=1)
 
 # Create reversed scores since osmnx MINIMIZES (instead of maximizing) on the weight parameter
@@ -227,7 +253,10 @@ edges_reset['geometry'] = edges_reset['geometry'].astype(str).apply(wkt.loads)
 edges_reset.to_csv('osm_with_scores.csv', index=True)
 edges_rest.to_csv('osm_scores_no_highways.csv', index=True)
 
-# Display all rows
-pd.set_option('display.max_rows', None)
-# Reset
-pd.reset_option('display.max_rows')
+
+
+
+# # Display all rows
+# pd.set_option('display.max_rows', None)
+# # Reset
+# pd.reset_option('display.max_rows')
