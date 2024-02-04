@@ -233,7 +233,7 @@ edges_reset = edges_reset.set_index(['u', 'v', 'key'])
 # Remove highways from df
 def contains_excluded_road_type(road_type):
     # List of road types to be excluded
-    excluded_types = ['trunk', 'trunk_link', 'motorway', 'motorway_link', 'primary', 'primary_link']
+    excluded_types = ['trunk', 'trunk_link', 'motorway', 'motorway_link', 'primary', 'primary_link', 'secondary']
     # If the road_type is a string, check if it contains any excluded type
     if isinstance(road_type, str):
         return any(excluded in road_type for excluded in excluded_types)
