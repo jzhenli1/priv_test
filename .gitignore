@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 cache/
+*.jpg
 
 # C extensions
 *.so
