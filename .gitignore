@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 cache/
 *.jpg
+*.zip
 
 # C extensions
 *.so
