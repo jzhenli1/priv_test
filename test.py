@@ -44,7 +44,8 @@ def import_data(path):
 merged_osm = import_data('scores_no_highways.csv')
 
 # Initializing OSM_bike Graph
-@st.cache(allow_output_mutation=True, hash_funcs={gpd.GeoDataFrame: lambda _: None})
+# @st.cache(allow_output_mutation=True, hash_funcs={gpd.GeoDataFrame: lambda _: None})
+@st.cache_resource
 def bike_graph(_edges):
     edges = gpd.GeoDataFrame(_edges).set_crs("epsg:4326")
     G = ox.graph_from_gdfs(nodes, _edges)
@@ -76,9 +77,18 @@ def get_bike_route(_graph, start_location, dest_location, weight):
     orig_edge = ox.nearest_edges(_graph, start_data[1], start_data[0])
     dest_edge = ox.nearest_edges(_graph, dest_data[1], dest_data[0])
     best_route = ox.shortest_path(_graph, orig_edge[0], dest_edge[1], weight=weight)
-    # best_pathDistance = nx.shortest_path_length(graph, orig_edge, dest_edge, weight=weight)
+    # Calculate the total length of the path using the 'length' attribute of the edges
+    bike_pathDistance = sum(_graph[u][v][0]['length'] for u, v in zip(best_route[:-1], best_route[1:]))
     
-    return best_route #, best_pathDistance
+    return best_route, bike_pathDistance
+
+# Calculate the midpoint between start & destination
+@st.cache_resource
+def calculate_midpoint(start_data, dest_data):
+    mid_lat = (start_data[0] + dest_data[0]) / 2
+    mid_lon = (start_data[1] + dest_data[1]) / 2
+    return (mid_lat, mid_lon)
+
 
    
 # App layout
@@ -100,12 +110,15 @@ route_type = st.selectbox('Select route type:', ['Shortest Route',
 if st.button('Find Route'):
     start_data = get_lat_lon(start_location)
     dest_data = get_lat_lon(dest_location)
+    
+    # Calculate the midpoint
+    midpoint = calculate_midpoint(start_data, dest_data)
 
     # Create folium map
-    m = folium.Map(location=start_data, zoom_start=12)
+    m = folium.Map(location=midpoint, zoom_start=13)
     
     # Get the best routes
-    bikeable_route = get_bike_route(G_bike, start_location, dest_location, "weightedFinalScore_reversed")
+    bikeable_route, bike_pathDistance = get_bike_route(G_bike, start_location, dest_location, "weightedFinalScore_reversed")
     bike_geom = [(G_bike.nodes[node]['y'], G_bike.nodes[node]['x']) for node in bikeable_route]
     shortest_route, pathDistance = get_osm_route(start_location, dest_location)
     route_geom = [(G.nodes[node]['y'], G.nodes[node]['x']) for node in shortest_route]
@@ -132,9 +145,55 @@ if st.button('Find Route'):
         folium.PolyLine(route_geom, color="blue", weight=4, opacity=1).add_to(m)
         folium.Marker(start_data, popup='Start',
                       icon = folium.Icon(color='green', prefix='fa',icon='bicycle')).add_to(m)
-        popup_text = f'Destination<br><br>Distance: {round(pathDistance/1000, 1)} km'
-        folium.Marker(dest_data, popup=popup_text, icon = folium.Icon(color='red', icon="flag")).add_to(m)
+        folium.Marker(dest_data, popup='Destination', icon = folium.Icon(color='red', icon="flag")).add_to(m)
 
+    
+    # Display route information prominently using Streamlit widgets
+    if route_type_lower == 'bike-friendly route':
+        st.markdown(f"#### Bike-Friendly Route Details")
+        st.write(f"**Distance:** {round(bike_pathDistance/1000, 2)} km")
+    elif route_type_lower == 'shortest route':
+        st.markdown(f"#### Shortest Route Details")
+        st.write(f"**Distance:** {round(pathDistance/1000, 2)} km")
+    elif route_type_lower == 'compare routes':
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown(f"#### Bike-Friendly Route")
+            st.write(f"**Distance:** {round(bike_pathDistance/1000, 2)} km")
+            st.write(f"**Estimated Time Needed:** {round((bike_pathDistance/1000 / 15) * 60)} minutes")
+        with col2:
+            st.markdown(f"#### Shortest Route")
+            st.write(f"**Distance:** {round(pathDistance/1000, 2)} km")
+            st.write(f"**Estimated Time Needed:** {round((pathDistance/1000 / 15) * 60)} minutes")
+        
+        st.markdown("""
+        <style>
+        .legend {
+            display: flex;
+            align-items: center;
+        }
+        .color-box {
+            width: 12px;
+            height: 12px;
+            margin-right: 5px;
+            border: 1px solid #888;
+        }
+        .blue-box {
+            background-color: blue;
+        }
+        .red-box {
+            background-color: red;
+        }
+        </style>
+        <div class="legend">
+            <div class="color-box blue-box"></div><span>- Bike-friendly Route</span>
+        </div>
+        <div class="legend">
+            <div class="color-box red-box"></div><span>- Shortest Route</span>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    
     # Display the map
     folium_static(m, width=700)
     
