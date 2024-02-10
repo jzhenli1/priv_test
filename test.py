@@ -101,8 +101,8 @@ def calculate_bikeability_score(_graph, route):
             if score is not None:
                 scores.append(score)
         except KeyError:
-            # Skip non-existent edges (used for shortest_route)
-            continue
+            # Means we have a motorway, primary road, etc. in the route
+            score = 0.2
     mean_score = sum(scores) / len(scores)
     return mean_score
 
