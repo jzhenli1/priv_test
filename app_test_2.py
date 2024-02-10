@@ -40,7 +40,7 @@ def import_data(path):
     merged_osm = merged_osm.set_geometry('geometry')
     return merged_osm
 
-merged_osm = import_data('baseline_scores.csv')
+merged_osm = import_data('scores_no_highways.csv')
 
 # Initializing OSM_bike Graph
 @st.cache(allow_output_mutation=True, hash_funcs={gpd.GeoDataFrame: lambda _: None})
@@ -89,7 +89,9 @@ start_location = st.text_input('Enter start location:')
 dest_location = st.text_input('Enter destination:')
 
 # Dropdown for route type
-route_type = st.selectbox('Select route type:', ['Shortest Route', 'Bike-Friendly Route'])
+route_type = st.selectbox('Select route type:', ['Shortest Route', 
+                                                 'Bike-Friendly Route',
+                                                 'Compare Routes'])
 
 # Button to trigger route calculation
 if st.button('Find Route'):
@@ -107,9 +109,22 @@ if st.button('Find Route'):
     # Convert route type to lowercase for consistency
     route_type_lower = route_type.lower()
 
-    if route_type_lower == 'bike-friendly route':
+    if route_type_lower == 'compare routes':
+        bikeable_route = get_bike_route(G_bike, start_location, dest_location, "weightedFinalScore_reversed")
+        bike_geom = [(G_bike.nodes[node]['y'], G_bike.nodes[node]['x']) for node in bikeable_route]
+        folium.PolyLine(bike_geom, color="blue", weight=4, opacity=1).add_to(m)
+        folium.Marker(start_data, popup='Start',
+                      icon = folium.Icon(color='green', prefix='fa',icon='bicycle')).add_to(m)
+        folium.Marker(dest_data, popup='Destination', icon = folium.Icon(color='red', icon="flag")).add_to(m)
+
+        # Fetch and display the shortest route
+        shortest_route, pathDistance = get_osm_route(start_location, dest_location)
+        route_geom = [(G.nodes[node]['y'], G.nodes[node]['x']) for node in shortest_route]
+        folium.PolyLine(route_geom, color="red", weight=4, opacity=0.5).add_to(m)
+    
+    elif route_type_lower == 'bike-friendly route':
         # Get the best bike route
-        bikeable_route = get_bike_route(G_bike, start_location, dest_location, "finalSore_reversed")
+        bikeable_route = get_bike_route(G_bike, start_location, dest_location, "weightedFinalScore_reversed")
         
         m = ox.plot_route_folium(G_bike, bikeable_route, tiles='openstreetmap')
         folium.Marker(start_data, popup='Start',
@@ -127,6 +142,7 @@ if st.button('Find Route'):
 
     # Display the map
     folium_static(m, width=700)
+    
 else:
     # Display an empty map
     folium_static(folium.Map(location=[48.7758, 9.1829], zoom_start=12), width=700)
