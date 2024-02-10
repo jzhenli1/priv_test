@@ -91,12 +91,12 @@ def calculate_midpoint(start_data, dest_data):
 
 # Function to calculate bikeability score
 @st.cache_resource
-def calculate_bikeability_score(graph, route):
+def calculate_bikeability_score(_graph, route):
     scores = []
     # Iterate over the route to get pairs of nodes (start, end) representing each edge
     for start, end in zip(route[:-1], route[1:]):
         try:
-            edge_data = graph[start][end][0]
+            edge_data = _graph[start][end][0]
             score = edge_data.get('weightedFinalScore', None)
             if score is not None:
                 scores.append(score)
