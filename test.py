@@ -89,6 +89,23 @@ def calculate_midpoint(start_data, dest_data):
     mid_lon = (start_data[1] + dest_data[1]) / 2
     return (mid_lat, mid_lon)
 
+# Function to calculate bikeability score
+@st.cache_resource
+def calculate_bikeability_score(graph, route):
+    scores = []
+    # Iterate over the route to get pairs of nodes (start, end) representing each edge
+    for start, end in zip(route[:-1], route[1:]):
+        try:
+            edge_data = graph[start][end][0]
+            score = edge_data.get('weightedFinalScore', None)
+            if score is not None:
+                scores.append(score)
+        except KeyError:
+            # Skip non-existent edges (used for shortest_route)
+            continue
+    mean_score = sum(scores) / len(scores)
+    return mean_score
+
 
    
 # App layout
@@ -122,6 +139,10 @@ if st.button('Find Route'):
     bike_geom = [(G_bike.nodes[node]['y'], G_bike.nodes[node]['x']) for node in bikeable_route]
     shortest_route, pathDistance = get_osm_route(start_location, dest_location)
     route_geom = [(G.nodes[node]['y'], G.nodes[node]['x']) for node in shortest_route]
+    
+    # Calculate bikeability score
+    bike_score = calculate_bikeability_score(G_bike, bikeable_route)
+    short_score = calculate_bikeability_score(G_bike, shortest_route)
 
     # Convert route type to lowercase for consistency
     route_type_lower = route_type.lower()
@@ -161,10 +182,12 @@ if st.button('Find Route'):
             st.markdown(f"#### Bike-Friendly Route")
             st.write(f"**Distance:** {round(bike_pathDistance/1000, 2)} km")
             st.write(f"**Estimated Time Needed:** {round((bike_pathDistance/1000 / 15) * 60)} minutes")
+            st.write(f"**Average Bikeability Score:** {round(bike_score*100, 2)} %")
         with col2:
             st.markdown(f"#### Shortest Route")
             st.write(f"**Distance:** {round(pathDistance/1000, 2)} km")
             st.write(f"**Estimated Time Needed:** {round((pathDistance/1000 / 15) * 60)} minutes")
+            st.write(f"**Average Bikeability Score:** {round(short_score*100, 2)} %")
         
         st.markdown("""
         <style>
