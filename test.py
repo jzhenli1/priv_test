@@ -174,11 +174,11 @@ if st.button('Find Route'):
     if route_type_lower == 'bike-friendly route':
         st.markdown(f"#### Bike-Friendly Route Details")
         st.write(f"**Distance:** {round(bike_pathDistance/1000, 2)} km")
-        st.write(f"**Distance:** {round(bike_pathDistance/1000, 2)} km")
+        st.write(f"**Estimated Time Needed:** {round((bike_pathDistance/1000 / 15) * 60)} minutes")
     elif route_type_lower == 'shortest route':
         st.markdown(f"#### Shortest Route Details")
         st.write(f"**Distance:** {round(pathDistance/1000, 2)} km")
-        st.write(f"**Distance:** {round(pathDistance/1000, 2)} km")
+        st.write(f"**Estimated Time Needed:** {round((pathDistance/1000 / 15) * 60)} minutes")
     elif route_type_lower == 'compare routes':
         col1, col2 = st.columns(2)
         with col1:
