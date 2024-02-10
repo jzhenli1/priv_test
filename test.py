@@ -103,6 +103,7 @@ def calculate_bikeability_score(_graph, route):
         except KeyError:
             # Means we have a motorway, primary road, etc. in the route
             score = 0.2
+            scores.append(score)
     mean_score = sum(scores) / len(scores)
     return mean_score
 
