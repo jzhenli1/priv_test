@@ -9,6 +9,7 @@ import geopandas as gpd
 from shapely import wkt
 
 # Getting start/dest coordinates
+@st.cache_resource
 def get_lat_lon(streetname):
     BASE_URL = 'https://nominatim.openstreetmap.org/search?format=json'
     response = requests.get(f'{BASE_URL}&street={streetname}&city=Stuttgart')
@@ -35,24 +36,24 @@ G, nodes = init_osm_graph('Stuttgart')
 @st.cache_data
 def import_data(path):
     merged_osm = pd.read_csv(path)
+    merged_osm = gpd.GeoDataFrame(merged_osm).set_index(["u", "v", "key"])
+    merged_osm["geometry"] = merged_osm["geometry"].astype(str).apply(lambda x: wkt.loads(x))
+    merged_osm = merged_osm.set_geometry('geometry')
     return merged_osm
 
-merged_osm = import_data('OSM/merged_osm.csv')
+merged_osm = import_data('scores_no_highways.csv')
 
 # Initializing OSM_bike Graph
-@st.cache_resource
-def db_to_graph(_db_edges):
-    # nodes = gpd.GeoDataFrame(db_nodes).set_index(["osmid"])
-    # nodes = _db_nodes
-    edges = gpd.GeoDataFrame(_db_edges).set_index(["u", "v", "key"])
-    edges["geometry"] = edges["geometry"].astype(str).apply(lambda x: wkt.loads(x))
-    edges = gpd.GeoDataFrame(edges).set_crs("epsg:4326")
-    G = ox.graph_from_gdfs(nodes, edges)
+@st.cache(allow_output_mutation=True, hash_funcs={gpd.GeoDataFrame: lambda _: None})
+def bike_graph(_edges):
+    edges = gpd.GeoDataFrame(_edges).set_crs("epsg:4326")
+    G = ox.graph_from_gdfs(nodes, _edges)
     return edges, G
 
-bike_edges, G_bike = db_to_graph(merged_osm)
+bike_edges, G_bike = bike_graph(merged_osm)
     
-# Get fastest route from OSM
+# Get shortest route from OSM
+@st.cache_resource
 def get_osm_route(start_location, dest_location):
      
     start_data = get_lat_lon(start_location)
@@ -66,14 +67,15 @@ def get_osm_route(start_location, dest_location):
     return shortest_route, pathDistance
 
 # Get best bike route from OSM
-def get_bike_route(graph, start_location, dest_location, weight):
+@st.cache_resource
+def get_bike_route(_graph, start_location, dest_location, weight):
      
     start_data = get_lat_lon(start_location)
     dest_data = get_lat_lon(dest_location)
 
-    orig_edge = ox.nearest_edges(graph, start_data[1], start_data[0])
-    dest_edge = ox.nearest_edges(graph, dest_data[1], dest_data[0])
-    best_route = ox.shortest_path(graph, orig_edge[0], dest_edge[1], weight=weight)
+    orig_edge = ox.nearest_edges(_graph, start_data[1], start_data[0])
+    dest_edge = ox.nearest_edges(_graph, dest_data[1], dest_data[0])
+    best_route = ox.shortest_path(_graph, orig_edge[0], dest_edge[1], weight=weight)
     # best_pathDistance = nx.shortest_path_length(graph, orig_edge, dest_edge, weight=weight)
     
     return best_route #, best_pathDistance
@@ -90,7 +92,9 @@ start_location = st.text_input('Enter start location:')
 dest_location = st.text_input('Enter destination:')
 
 # Dropdown for route type
-route_type = st.selectbox('Select route type:', ['Shortest Route', 'Bike-Friendly Route'])
+route_type = st.selectbox('Select route type:', ['Shortest Route', 
+                                                 'Bike-Friendly Route',
+                                                 'Compare Routes'])
 
 # Button to trigger route calculation
 if st.button('Find Route'):
@@ -98,29 +102,34 @@ if st.button('Find Route'):
     dest_data = get_lat_lon(dest_location)
 
     # Create folium map
-    m = folium.Map(location=start_data, zoom_start=11)
-
-    # Add markers and polyline
-    folium.Marker(start_data, popup='Start',
-                  icon = folium.Icon(color='green', prefix='fa',icon='bicycle')).add_to(m)
-    folium.Marker(dest_data, popup='Destination', icon = folium.Icon(color='red', icon="flag")).add_to(m)
+    m = folium.Map(location=start_data, zoom_start=12)
     
+    # Get the best routes
+    bikeable_route = get_bike_route(G_bike, start_location, dest_location, "weightedFinalScore_reversed")
+    bike_geom = [(G_bike.nodes[node]['y'], G_bike.nodes[node]['x']) for node in bikeable_route]
+    shortest_route, pathDistance = get_osm_route(start_location, dest_location)
+    route_geom = [(G.nodes[node]['y'], G.nodes[node]['x']) for node in shortest_route]
+
     # Convert route type to lowercase for consistency
     route_type_lower = route_type.lower()
 
-    if route_type_lower == 'bike-friendly route':
-        # Get the best bike route
-        bikeable_route = get_bike_route(G_bike, start_location, dest_location, "finalSore_reversed")
-        
-        m = ox.plot_route_folium(G_bike, bikeable_route, tiles='openstreetmap')
+    if route_type_lower == 'compare routes':
+        folium.PolyLine(bike_geom, color="blue", weight=4, opacity=1).add_to(m)
+        folium.Marker(start_data, popup='Start',
+                      icon = folium.Icon(color='green', prefix='fa',icon='bicycle')).add_to(m)
+        folium.Marker(dest_data, popup='Destination', icon = folium.Icon(color='red', icon="flag")).add_to(m)
+
+        # Fetch and display the shortest route
+        folium.PolyLine(route_geom, color="red", weight=4, opacity=0.5).add_to(m)
+    
+    elif route_type_lower == 'bike-friendly route':
+        folium.PolyLine(bike_geom, color="blue", weight=4, opacity=1).add_to(m)
         folium.Marker(start_data, popup='Start',
                       icon = folium.Icon(color='green', prefix='fa',icon='bicycle')).add_to(m)
         folium.Marker(dest_data, popup='Destination', icon = folium.Icon(color='red', icon="flag")).add_to(m)
     else:      
         # Get the shortest route
-        shortest_route, pathDistance = get_osm_route(start_location, dest_location)
-         
-        m = ox.plot_route_folium(G, shortest_route, tiles='openstreetmap')
+        folium.PolyLine(route_geom, color="blue", weight=4, opacity=1).add_to(m)
         folium.Marker(start_data, popup='Start',
                       icon = folium.Icon(color='green', prefix='fa',icon='bicycle')).add_to(m)
         popup_text = f'Destination<br><br>Distance: {round(pathDistance/1000, 1)} km'
@@ -128,6 +137,7 @@ if st.button('Find Route'):
 
     # Display the map
     folium_static(m, width=700)
+    
 else:
     # Display an empty map
     folium_static(folium.Map(location=[48.7758, 9.1829], zoom_start=12), width=700)
