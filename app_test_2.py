@@ -91,13 +91,13 @@ def calculate_midpoint(start_data, dest_data):
 
 # Function to calculate bikeability score
 @st.cache_resource
-def calculate_bikeability_score(_graph, route):
+def calculate_bikeability_score(_graph, route, weight_param):
     scores = []
     # Iterate over the route to get pairs of nodes (start, end) representing each edge
     for start, end in zip(route[:-1], route[1:]):
         try:
             edge_data = _graph[start][end][0]
-            score = edge_data.get('noelevationScore', None)
+            score = 1 - edge_data.get(weight_param, None)
             if score is not None:
                 scores.append(score)
         except KeyError:
@@ -124,10 +124,20 @@ route_type = st.selectbox('Select route type:', ['Shortest Route',
                                                  'Bike-Friendly Route',
                                                  'Compare Routes'])
 
+# Radio button for selecting weight parameter
+weight_options = {
+    'I trust my App developers (default)': 'baselineScore_reversed',
+    'I am fit and not scared of slopes': 'noelevationScore_reversed'
+}
+selected_weight = st.radio('Select Weight Parameter for Bike Routing:', list(weight_options.keys()))
+
 # Button to trigger route calculation
 if st.button('Find Route'):
     start_data = get_lat_lon(start_location)
     dest_data = get_lat_lon(dest_location)
+    
+    # Use the selected weight parameter from the radio button
+    weight_param = weight_options[selected_weight]
     
     # Calculate the midpoint
     midpoint = calculate_midpoint(start_data, dest_data)
@@ -136,14 +146,14 @@ if st.button('Find Route'):
     m = folium.Map(location=midpoint, zoom_start=13)
     
     # Get the best routes
-    bikeable_route, bike_pathDistance = get_bike_route(G_bike, start_location, dest_location, "noelevationScore_reversed")
+    bikeable_route, bike_pathDistance = get_bike_route(G_bike, start_location, dest_location, weight_param)
     bike_geom = [(G_bike.nodes[node]['y'], G_bike.nodes[node]['x']) for node in bikeable_route]
     shortest_route, pathDistance = get_osm_route(start_location, dest_location)
     route_geom = [(G.nodes[node]['y'], G.nodes[node]['x']) for node in shortest_route]
     
     # Calculate bikeability score
-    bike_score = calculate_bikeability_score(G_bike, bikeable_route)
-    short_score = calculate_bikeability_score(G_bike, shortest_route)
+    bike_score = calculate_bikeability_score(G_bike, bikeable_route, weight_param)
+    short_score = calculate_bikeability_score(G_bike, shortest_route, weight_param)
 
     # Convert route type to lowercase for consistency
     route_type_lower = route_type.lower()
