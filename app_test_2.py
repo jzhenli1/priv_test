@@ -41,7 +41,7 @@ def import_data(path):
     merged_osm = merged_osm.set_geometry('geometry')
     return merged_osm
 
-merged_osm = import_data('scores_with_diff_weights.csv')
+merged_osm = import_data('test_scores.csv')
 
 # Initializing OSM_bike Graph
 # @st.cache(allow_output_mutation=True, hash_funcs={gpd.GeoDataFrame: lambda _: None})
