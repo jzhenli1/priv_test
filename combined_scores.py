@@ -67,7 +67,7 @@ def road_type_to_score(road_type):
     elif re.search(r'service', road_type):
         return 0.5
     elif re.search(r'secondary', road_type):
-        return 0.1
+        return 0
     elif re.search(r'tertiary', road_type):
         return 0.2
     elif re.search(r'unclassified', road_type):
