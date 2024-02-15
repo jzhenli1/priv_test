@@ -9,3 +9,12 @@ scikit-learn
 pandas
 geopandas
 shapely
+
+torch
+pandas
+numpy
+scipy
+shapely
+pathlib
+rasterio
+PIL
