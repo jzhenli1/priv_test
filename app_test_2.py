@@ -227,14 +227,8 @@ if st.button('Find Route'):
                 bike_pathDistance = pathDistance 
                 bike_score = short_score
                 # Optionally, log the error or inform the user
-                st.info("Failed to find a bike-friendly route up to our standards. Displaying the shortest route instead.")
-            
-            
-            
-            
-            # # If we have a bikeable route, use it
-            # bike_geom = [(G_bike.nodes[node]['y'], G_bike.nodes[node]['x']) for node in bikeable_route]
-            # bike_score = calculate_bikeability_score(G_bike, bikeable_route, weight_param)
+                st.error("Failed to display part of bicycle-friendly route. Displaying the shortest route instead.")
+
         else:
             # If no bikeable route, fallback to shortest and consider its score
             bike_geom = route_geom  
