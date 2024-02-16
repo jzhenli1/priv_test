@@ -255,7 +255,11 @@ if st.button('Find Route'):
             prefer_bike_route = False
         # Check if bikeability score for the bike route is within 2 percentage points of the shortest route
         # and the time needed is longer by more than 5 minutes
-        elif abs(bike_score - short_score) <= 0.02 and (bike_time_estimated - shortest_time_estimated) > 5:
+        elif abs(bike_score - short_score) <= 0.02 and ((bike_time_estimated - shortest_time_estimated) / shortest_time_estimated) > 0.2:
+            prefer_bike_route = False
+        elif abs(bike_score - short_score) <= 0.05 and ((bike_time_estimated - shortest_time_estimated) / shortest_time_estimated) > 0.5:
+            prefer_bike_route = False
+        elif abs(bike_score - short_score) <= 0.20 and ((bike_time_estimated - shortest_time_estimated) / shortest_time_estimated) > 1.0:
             prefer_bike_route = False
             
         # Based on the decision, adjust the route to be used for display and further calculations
